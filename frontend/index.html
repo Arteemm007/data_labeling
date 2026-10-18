@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assessor Platform — Система разметки документов</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <style>
+    body { background-color: #f8fafc; color: #0f172a; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden select-none">
+<div id="app" class="h-full flex flex-col">
+
+  <!-- ==================== ОКНО АВТОРИЗАЦИИ ==================== -->
+  <div v-if="!currentUser" class="fixed inset-0 z-50 bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-2xl p-8 max-w-md w-full space-y-6 shadow-xl relative">
+      <div class="absolute top-6 right-6">
+        <select v-model="currentLang" @change="changeLanguage(currentLang)" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:border-slate-900 transition cursor-pointer">
+          <option value="ru">RU 🇷🇺</option>
+          <option value="en">EN 🇬🇧</option>
+        </select>
+      </div>
+      <div class="text-center space-y-2">
+        <div class="w-11 h-11 rounded-xl bg-slate-900 mx-auto flex items-center justify-center font-bold text-white text-lg shadow-sm">A</div>
+        <h2 class="text-xl font-bold text-slate-900">{{ t('loginTitle') }}</h2>
+        <p class="text-xs text-slate-500">{{ t('loginSubtitle') }}</p>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">{{ t('loginLabel') }}</label>
+          <input v-model="loginForm.username" placeholder="Например: superadmin" @keyup.enter="handleLogin"
+            class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">{{ t('passLabel') }}</label>
+          <div class="relative flex items-center">
+            <input :type="showLoginPass ? 'text' : 'password'" v-model="loginForm.password" placeholder="••••••••" @keyup.enter="handleLogin"
+              class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 pr-10 text-sm text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition" />
+            <button type="button" @click="showLoginPass = !showLoginPass" class="absolute right-3 text-slate-400 hover:text-slate-700 text-sm">
+              {{ showLoginPass ? '🙈' : '👁️' }}
+            </button>
+          </div>
+        </div>
+        <button @click="handleLogin" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-sm shadow-sm transition">
+          {{ t('signInBtn') }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== ВЕРХНЯЯ ПАНЕЛЬ ==================== -->
+  <header v-if="currentUser" class="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-2.5 h-2.5 rounded-full bg-slate-900"></div>
+        <span class="font-bold tracking-tight text-slate-900">ASSESSOR<span class="font-normal text-slate-500">HUB</span></span>
+      </div>
+      <span class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-medium border border-slate-200">
+        {{ currentUser.role === 'assessor' ? t('assessorPanel') : t('adminPanel') }}
+      </span>
+      <span v-if="currentUser.role !== 'assessor' && conflicts.length > 0"
+        class="text-xs px-2.5 py-1 rounded-md bg-rose-50 text-rose-600 font-semibold border border-rose-200">
+        {{ t('conflictsCount') }}: {{ conflicts.length }}
+      </span>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <!-- Индикатор таймера для асессора -->
+      <div v-if="currentUser.role === 'assessor' && currentTask" class="flex items-center gap-2 text-xs px-3 py-1 rounded-full border"
+        :class="isIdle ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'">
+        <span class="w-2 h-2 rounded-full" :class="isIdle ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'"></span>
+        <span>{{ isIdle ? t('pauseState') : `${t('timeLabel')}: ${activeSeconds} ${t('secLabel')}` }}</span>
+      </div>
+
+      <div class="text-xs text-slate-600 flex items-center gap-2">
+        <span>{{ t('loginLabel') }}: <b class="text-slate-900">{{ currentUser.username }}</b></span>
+        <span class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded uppercase text-[10px] font-bold">
+          {{ roleLabel(currentUser.role) }}
+        </span>
+      </div>
+      <select v-model="currentLang" @change="changeLanguage(currentLang)" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-slate-900 transition cursor-pointer">
+        <option value="ru">RU</option>
+        <option value="en">EN</option>
+      </select>
+      <button @click="logout" class="text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-300 font-medium transition">
+        {{ t('logoutBtn') }}
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== ЭКРАН 1: РАБОЧЕЕ МЕСТО АСЕССОРА (ТОЛЬКО ДЛЯ ASSESSOR) ==================== -->
+  <main v-if="currentUser && currentUser.role === 'assessor'" class="flex-1 flex overflow-hidden">
+
+    <!-- ЛЕВАЯ ЧАСТЬ: ФОРМА РАЗМЕТКИ -->
+    <section class="w-1/2 h-full bg-white border-r border-slate-200 flex flex-col justify-between">
+      <div class="p-6 overflow-y-auto flex-1 space-y-6" v-if="currentTask">
+        <div class="flex items-end justify-between gap-4 pb-5 border-b border-slate-200">
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-slate-600 mb-1.5">{{ t('selectDocType') }}</label>
+            <select v-model="selectedDocType" @change="initFormFields"
+              class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-slate-900">
+              <option value="" disabled>{{ t('selectDocTypePlaceholder') }}</option>
+              <option v-for="dt in docTypes" :key="dt.id" :value="dt.name">{{ dt.name }}</option>
+            </select>
+          </div>
+          <button @click="submitTrash"
+            class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-semibold transition shrink-0">
+            {{ t('noSuchTypeBtn') }}
+          </button>
+        </div>
+
+        <div v-if="selectedDocType && activeSchema.length" class="space-y-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">{{ t('fieldsToFill') }}</h3>
+          <div v-for="field in activeSchema" :key="field.key"
+            class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-slate-700 mb-1">
+                {{ field.label }} <span class="text-slate-400 font-normal ml-1">({{ field.key }})</span>
+              </label>
+              <input
+                :type="field.type === 'number' ? 'number' : (field.type === 'date' ? 'date' : 'text')"
+                v-model="formData[field.key].value"
+                :disabled="formData[field.key].unreadable"
+                :placeholder="formData[field.key].unreadable ? t('unreadableField') : t('enterValue')"
+                class="w-full bg-white border border-slate-300 disabled:bg-amber-50 disabled:border-amber-200 disabled:text-amber-700 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-900" />
+            </div>
+            <button type="button" @click="toggleUnreadable(field.key)"
+              :class="formData[field.key].unreadable ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'"
+              class="mt-5 px-3 py-2 rounded-lg border text-xs font-medium transition shrink-0">
+              {{ formData[field.key].unreadable ? t('unreadableCheck') : t('unreadableBtn') }}
+            </button>
+          </div>
+        </div>
+        <div v-else class="text-center py-12 text-slate-400 text-sm">
+          {{ t('noDocTypeSelected') }}
+        </div>
+      </div>
+
+      <div v-else class="flex-1 flex items-center justify-center p-6 text-center">
+        <div class="space-y-2">
+          <p class="text-base font-semibold text-slate-700">{{ t('noTasksTitle') }}</p>
+          <p class="text-xs text-slate-400">{{ t('noTasksDesc') }}</p>
+          <button @click="fetchNextTask" class="mt-3 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-medium">{{ t('checkUpdatesBtn') }}</button>
+        </div>
+      </div>
+
+      <div class="h-16 bg-slate-50 border-t border-slate-200 px-6 flex items-center justify-between shrink-0">
+        <div class="text-xs text-emerald-600 font-medium">{{ statusBanner }}</div>
+        <button @click="submitForm" :disabled="!currentTask || !selectedDocType"
+          class="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-sm rounded-lg shadow-sm transition">
+          {{ t('saveAndNextBtn') }}
+        </button>
+      </div>
+    </section>
+
+    <!-- ПРАВАЯ ЧАСТЬ: ПРОСМОТР ДОКУМЕНТА -->
+    <section class="w-1/2 h-full bg-slate-100 flex flex-col">
+      <div class="h-11 bg-white border-b border-slate-200 px-4 flex items-center justify-between shrink-0">
+        <div class="text-xs text-slate-600 truncate">
+          <span v-if="currentTask">{{ t('documentLabel') }} <b class="text-slate-900">#{{ currentTask.document_id }}</b> ({{ currentTask.filename }})</span>
+          <span v-else>{{ t('waitingTask') }}</span>
+        </div>
+        <div class="flex items-center gap-1.5" v-if="currentTask">
+          <button @click="zoomOut" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-bold border border-slate-300">−</button>
+          <span class="text-xs text-slate-700 w-12 text-center font-medium">{{ Math.round(scale * 100) }}%</span>
+          <button @click="zoomIn" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-bold border border-slate-300">+</button>
+          <button @click="rotateDoc" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs border border-slate-300 ml-1">↻ 90°</button>
+          <button @click="resetViewer" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs text-slate-600 border border-slate-300">{{ t('resetBtn') }}</button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-auto relative bg-slate-200/70 p-8 flex items-center justify-center" @wheel.prevent="handleWheelZoom">
+        <div v-if="!currentTask" class="text-center text-slate-400">
+          <p class="text-sm">{{ t('docNotSelected') }}</p>
+        </div>
+        <div v-else class="w-full h-full flex items-center justify-center">
+          <iframe v-if="isPdf(currentTask.filename, currentTask.file_url)" :src="fileUrl(currentTask.document_id)"
+            :style="{ transform: `scale(${scale}) rotate(${rotation}deg)`, transformOrigin: 'center center' }"
+            class="w-full h-full rounded-lg border border-slate-300 bg-white shadow-sm">
+          </iframe>
+          <img v-else :src="fileUrl(currentTask.document_id)"
+            :style="{ transform: `scale(${scale}) rotate(${rotation}deg)` }"
+            class="max-w-full max-h-[82vh] object-contain select-none transition-transform duration-75 rounded shadow-sm bg-white" />
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== ЭКРАН 2: ПАНЕЛЬ АДМИНИСТРАТОРА И СУПЕРАДМИНА ==================== -->
+  <main v-if="currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')"
+    class="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 select-text">
+
+    <!-- ВЕРХНИЙ РЯД: БЛОКИ 1, 2, 3 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- БЛОК 1: ЗАГРУЗКА ФАЙЛОВ И ПЕРЕХЛЕСТ -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div class="space-y-4">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+            <h2 class="text-sm font-bold text-slate-900">{{ t('block1Title') }}</h2>
+            <span class="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full font-medium">
+              {{ t('totalUploaded') }}: <strong class="text-slate-900">{{ totalDocumentsCount }}</strong>
+            </span>
+          </div>
+
+          <!-- Перехлест с кнопкой ОК -->
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+            <label class="block text-xs font-medium text-slate-700">{{ t('overlapLabel') }}</label>
+            <div class="flex gap-2">
+              <input type="number" v-model="overlapPercent" min="0" max="100"
+                class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900" />
+              <button @click="updateOverlap"
+                class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition">
+                {{ t('okBtn') }}
+              </button>
+            </div>
+            <p v-if="overlapSavedMsg" class="text-[11px] text-emerald-600 font-medium">{{ overlapSavedMsg }}</p>
+          </div>
+
+          <!-- Загрузка локальных файлов -->
+          <div class="space-y-2">
+            <label class="block text-xs font-medium text-slate-700">{{ t('uploadLocalFiles') }}</label>
+            <input type="file" multiple @change="handleFileSelect"
+              class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-300 file:text-xs file:font-medium file:bg-white file:text-slate-700 hover:file:bg-slate-50" />
+            <button @click="uploadSelectedFiles" :disabled="!selectedFiles.length || isUploading"
+              class="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-semibold transition">
+              {{ isUploading ? t('uploadingStatus') : t('uploadFilesBtn') + ` (${selectedFiles.length})` }}
+            </button>
+          </div>
+
+          <!-- Массовый импорт по ссылкам из CSV -->
+          <div class="space-y-2 pt-2 border-t border-slate-100">
+            <label class="block text-xs font-medium text-slate-700">{{ t('csvImportLabel') }}</label>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
+              <input type="file" accept=".csv" @change="handleCsvSelect"
+                class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-300 file:text-xs file:font-medium file:bg-white file:text-slate-700 hover:file:bg-slate-50 cursor-pointer" />
+              <button @click="uploadCsvLinks" :disabled="!selectedCsvFile || isUploading"
+                class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-semibold transition">
+                {{ isUploading ? t('importingStatus') : t('importCsvBtn') }}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- БЛОК 2: КОНСТРУКТОР ФОРМ -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+        <div class="space-y-3">
+          <div class="border-b border-slate-100 pb-3">
+            <h2 class="text-sm font-bold text-slate-900">{{ t('block2Title') }}</h2>
+          </div>
+
+          <input v-model="newDocTypeName" :placeholder="t('docTypePlaceholder')"
+            class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white" />
+
+          <div class="space-y-2 max-h-36 overflow-y-auto pr-1">
+            <div v-for="(f, idx) in newDocTypeFields" :key="idx" class="flex gap-1.5 items-center">
+              <input v-model="f.key" placeholder="ключ (inn)" class="w-1/3 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900" />
+              <input v-model="f.label" :placeholder="t('fieldLabelPlaceholder')" class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900" />
+              <select v-model="f.type" class="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-slate-900">
+                <option value="text">{{ t('typeText') }}</option>
+                <option value="number">{{ t('typeNumber') }}</option>
+                <option value="date">{{ t('typeDate') }}</option>
+              </select>
+              <button @click="removeBuilderField(idx)" class="text-rose-500 hover:bg-rose-50 rounded px-1.5 py-1 font-bold text-xs">✕</button>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <button @click="addBuilderField" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium border border-slate-200">
+              {{ t('addFieldBtn') }}
+            </button>
+            <button @click="saveNewDocType" class="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold">
+              {{ t('saveDocTypeBtn') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 space-y-1.5">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase">{{ t('createdDocTypes') }}:</div>
+          <div class="max-h-28 overflow-y-auto space-y-1 pr-1">
+            <div v-if="!docTypes.length" class="text-xs text-slate-400">{{ t('noDocTypesYet') }}</div>
+            <div v-for="dt in docTypes" :key="dt.id" class="flex items-center justify-between text-xs text-slate-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+              <span class="font-medium">{{ dt.name }} <span class="text-slate-400 font-normal">({{ dt.fields_schema.length }} {{ t('fieldsCountLabel') }})</span></span>
+              <button @click="deleteDocType(dt.id)" class="text-rose-600 hover:underline text-[11px] font-medium">{{ t('deleteBtn') }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- БЛОК 3: ЭКСПОРТ ДАННЫХ -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+        <div class="space-y-4">
+          <div class="border-b border-slate-100 pb-3">
+            <h2 class="text-sm font-bold text-slate-900">{{ t('block3Title') }}</h2>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
+            <div class="text-xs text-slate-500">{{ t('readyToExport') }}:</div>
+            <div class="text-3xl font-bold text-slate-900">{{ exportedData.length }} <span class="text-sm font-normal text-slate-500">{{ t('docShort') }}.</span></div>
+            <p class="text-[11px] text-slate-500 pt-1">
+              {{ t('exportDesc') }}
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-2 mt-4">
+          <div class="flex gap-3">
+            <button @click="downloadExport('json')" class="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm transition">
+              {{ t('downloadJsonBtn') }}
+            </button>
+            <button @click="downloadExport('csv')" class="flex-1 py-2.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 rounded-xl text-xs font-semibold transition">
+              {{ t('downloadCsvBtn') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- СРЕДНИЙ РЯД: БЛОК 5 (ПОЛЬЗОВАТЕЛИ) И БЛОК 6 (СТАТИСТИКА) -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- БЛОК 5: УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-900">{{ t('block5Title') }}</h2>
+          <span class="text-xs text-slate-500">{{ t('totalLabel') }}: {{ users.length }}</span>
+        </div>
+
+        <!-- Личные данные текущего пользователя -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+          <div class="text-xs font-semibold text-slate-700">{{ t('myAccountTitle') }} ({{ currentUser.username }}):</div>
+          <div class="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+            <input v-model="myAccount.username" :placeholder="t('myLoginPlaceholder')"
+              class="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900" />
+            <div class="relative flex-1 flex items-center">
+              <input :type="myAccount.showPass ? 'text' : 'password'" v-model="myAccount.password" :placeholder="t('myPassPlaceholder')"
+                class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 pr-8 text-xs text-slate-900" />
+              <button type="button" @click="myAccount.showPass = !myAccount.showPass" class="absolute right-2 text-slate-400 hover:text-slate-700 text-xs">
+                {{ myAccount.showPass ? '🙈' : '👁️' }}
+              </button>
+            </div>
+            <button @click="saveMyAccount" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shrink-0">
+              {{ t('updateBtn') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Добавление нового пользователя -->
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-700">{{ t('addUserTitle') }}:</div>
+          <div class="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+            <input v-model="newUser.username" :placeholder="t('loginLabel')"
+              class="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900" />
+            <div class="relative flex-1 flex items-center">
+              <input :type="newUser.showPass ? 'text' : 'password'" v-model="newUser.password" :placeholder="t('passLabel')"
+                class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 pr-8 text-xs text-slate-900" />
+              <button type="button" @click="newUser.showPass = !newUser.showPass" class="absolute right-2 text-slate-400 hover:text-slate-700 text-xs">
+                {{ newUser.showPass ? '🙈' : '👁️' }}
+              </button>
+            </div>
+            <select v-model="newUser.role" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900">
+              <option value="assessor">{{ t('roleAssessor') }}</option>
+              <option value="admin">{{ t('roleAdmin') }}</option>
+              <option v-if="currentUser.role === 'superadmin'" value="superadmin">{{ t('roleSuperadmin') }}</option>
+            </select>
+            <button @click="createUser" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shrink-0">
+              {{ t('addBtn') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Список существующих пользователей -->
+        <div class="space-y-2 max-h-56 overflow-y-auto pr-1 pt-2 border-t border-slate-100">
+          <div v-for="usr in users" :key="usr.id" class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap sm:flex-nowrap items-center gap-2 text-xs">
+            <input v-model="usr.username" class="w-28 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-medium text-slate-900" />
+            <div class="relative flex-1 flex items-center">
+              <input :type="usr.showPass ? 'text' : 'password'" v-model="usr.password"
+                class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 pr-7 text-xs text-slate-900" />
+              <button type="button" @click="usr.showPass = !usr.showPass" class="absolute right-2 text-slate-400 hover:text-slate-700 text-xs">
+                {{ usr.showPass ? '🙈' : '👁️' }}
+              </button>
+            </div>
+            <select v-model="usr.role" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800">
+              <option value="assessor">{{ t('roleAssessor') }}</option>
+              <option value="admin">{{ t('roleAdmin') }}</option>
+              <option v-if="currentUser.role === 'superadmin'" value="superadmin">{{ t('roleSuperadmin') }}</option>
+            </select>
+            <button @click="saveUserRow(usr)" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-semibold">
+              {{ t('saveBtn') }}
+            </button>
+            <button @click="deleteUser(usr.id)" class="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-medium">
+              {{ t('deleteBtn') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- БЛОК 6: СТАТИСТИКА АСЕССОРОВ -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">{{ t('block6Title') }}</h2>
+            <p class="text-[11px] text-slate-400">{{ t('block6Subtitle') }}</p>
+          </div>
+          <button @click="loadAllData" class="text-xs text-slate-600 hover:text-slate-900 border border-slate-200 px-2.5 py-1 rounded-lg bg-slate-50">
+            ↻ {{ t('refreshBtn') }}
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500">
+                <th class="py-2.5 px-2">{{ t('thAssessor') }}</th>
+                <th class="py-2.5 px-2">{{ t('thLabeled') }}</th>
+                <th class="py-2.5 px-2">{{ t('thTotalTime') }}</th>
+                <th class="py-2.5 px-2">{{ t('thAvgTime') }}</th>
+                <th class="py-2.5 px-2">{{ t('thErrors') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!stats.length">
+                <td colspan="5" class="py-6 text-center text-slate-400">{{ t('noStatsData') }}</td>
+              </tr>
+              <tr v-for="st in stats" :key="st.assessor_id" class="border-b border-slate-100 hover:bg-slate-50">
+                <td class="py-2.5 px-2 font-semibold text-slate-900">{{ st.assessor_id }}</td>
+                <td class="py-2.5 px-2 text-slate-700">{{ st.total_completed }}</td>
+                <td class="py-2.5 px-2 text-slate-700">{{ formatTime(st.total_time_sec) }}</td>
+                <td class="py-2.5 px-2 text-slate-700">{{ st.avg_speed_sec }} {{ t('secLabel') }}</td>
+                <td class="py-2.5 px-2 font-bold" :class="st.errors > 0 ? 'text-rose-600' : 'text-emerald-600'">
+                  {{ st.errors }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- БЛОК 7: ТОЛЬКО ДЛЯ СУПЕРАДМИНА -->
+    <div v-if="currentUser.role === 'superadmin'" class="bg-white border border-slate-300 rounded-2xl p-5 shadow-sm space-y-4">
+      <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-slate-900">{{ t('block7Title') }}</h2>
+          <p class="text-[11px] text-slate-500">{{ t('block7Subtitle') }}</p>
+        </div>
+        <span class="text-[10px] font-bold uppercase px-2.5 py-1 bg-slate-900 text-white rounded-md">Superadmin Only</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+          <div>
+            <div class="text-xs font-bold text-slate-800">{{ t('backupTitle') }}</div>
+            <p class="text-[11px] text-slate-500 mt-1">{{ t('backupDesc') }}</p>
+          </div>
+          <button @click="downloadBackup" class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition">
+            {{ t('downloadBackupBtn') }}
+          </button>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+          <div>
+            <div class="text-xs font-bold text-slate-800">{{ t('restoreTitle') }}</div>
+            <p class="text-[11px] text-slate-500 mt-1">{{ t('restoreDesc') }}</p>
+            <input type="file" accept=".json" @change="handleBackupFileSelect"
+              class="mt-2 block w-full text-[11px] text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border file:border-slate-300 file:bg-white file:text-slate-700" />
+          </div>
+          <button @click="restoreBackup" :disabled="!backupFileContent"
+            class="w-full py-2 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-900 border border-slate-300 rounded-lg text-xs font-semibold transition">
+            {{ t('restoreBtn') }}
+          </button>
+        </div>
+
+        <div class="p-4 rounded-xl bg-rose-50/60 border border-rose-200 flex flex-col justify-between space-y-3">
+          <div>
+            <div class="text-xs font-bold text-rose-700">{{ t('resetTitle') }}</div>
+            <p class="text-[11px] text-rose-600/80 mt-1">{{ t('resetDesc') }}</p>
+          </div>
+          <button @click="resetAllData" class="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition">
+            {{ t('resetBtnText') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- БЛОК 4: ПЕРЕПРОВЕРКА КОНФЛИКТОВ -->
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 w-full">
+      <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">{{ t('block4Title') }} — {{ conflicts.length }} {{ t('pcsLabel') }}.</h2>
+          <p class="text-xs text-slate-500">{{ t('block4Subtitle') }}</p>
+        </div>
+      </div>
+
+      <div v-if="!conflicts.length" class="py-10 text-center text-sm text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        {{ t('noConflictsMsg') }}
+      </div>
+
+      <div v-for="conf in conflicts" :key="conf.document_id"
+        class="p-5 bg-slate-50 rounded-2xl border border-slate-300 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 bg-rose-100 text-rose-700 font-bold text-xs rounded-md">{{ t('conflictBadge') }}</span>
+            <span class="text-sm font-bold text-slate-900">{{ t('documentLabel') }} #{{ conf.document_id }} ({{ conf.filename }})</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <a :href="fileUrl(conf.document_id)" target="_blank"
+              class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100">
+              {{ t('openOriginalBtn') }} ↗
+            </a>
+            <button @click="sendToRecheck(conf.document_id)"
+              class="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+              ↻ {{ t('sendToRecheckBtn') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <div v-for="(sub, sIdx) in conf.submissions" :key="sub.id || sub.assessor_id"
+            class="lg:col-span-3 bg-white p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-4 shadow-sm">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span class="text-xs font-bold text-slate-900">{{ t('assessorLabel') }} #{{ sIdx + 1 }}: {{ sub.assessor_id }}</span>
+                <span class="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-medium">
+                  {{ sub.is_trash ? t('noSuchTypeShort') : (sub.selected_doc_type || t('noTypeShort')) }}
+                </span>
+              </div>
+
+              <div v-if="sub.is_trash" class="p-3 bg-rose-50 text-rose-700 rounded-lg text-xs font-medium">
+                {{ t('markedAsTrash') }}
+              </div>
+              <div v-else class="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div v-for="(valObj, key) in sub.data" :key="key" class="p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                  <div class="text-[10px] font-semibold uppercase text-slate-400">{{ key }}</div>
+                  <div v-if="valObj && valObj.unreadable" class="text-amber-600 font-semibold mt-0.5">{{ t('unreadableCheck') }}</div>
+                  <div v-else class="font-medium text-slate-900 mt-0.5 break-words">
+                    {{ (valObj && typeof valObj === 'object') ? (valObj.value || '—') : (valObj || '—') }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button @click="resolveConflictWith(conf.document_id, sub)"
+              class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition">
+              {{ t('acceptVariantBtn') }} ({{ sub.assessor_id }})
+            </button>
+          </div>
+
+          <div class="lg:col-span-6 bg-slate-100 rounded-xl border border-slate-200 p-3 flex items-center justify-center min-h-[360px]">
+            <iframe v-if="isPdf(conf.filename, conf.file_url)" :src="fileUrl(conf.document_id)"
+              class="w-full h-[400px] rounded-lg border border-slate-300 bg-white">
+            </iframe>
+            <img v-else :src="fileUrl(conf.document_id)"
+              class="max-w-full max-h-[400px] object-contain rounded-lg border border-slate-300 bg-white" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      currentLang: localStorage.getItem('lang') || 'ru',
+      translations: {
+        ru: {
+          loginTitle: "Вход в систему",
+          loginSubtitle: "Введите логин и пароль для доступа к платформе",
+          loginLabel: "Логин",
+          passLabel: "Пароль",
+          signInBtn: "Войти",
+          assessorPanel: "Панель разметки асессора",
+          adminPanel: "Панель управления администратора",
+          conflictsCount: "Конфликтов на перепроверке",
+          pauseState: "Пауза (бездействие > 30с)",
+          timeLabel: "Время",
+          secLabel: "сек",
+          logoutBtn: "Выйти",
+          selectDocType: "Выберите тип документа",
+          selectDocTypePlaceholder: "-- Выберите тип документа --",
+          noSuchTypeBtn: "Нет такого типа",
+          fieldsToFill: "Поля для заполнения",
+          unreadableField: "Поле отмечено как нечитаемое",
+          enterValue: "Введите значение...",
+          unreadableCheck: "Нечитаемо ✓",
+          unreadableBtn: "Нечитаемо",
+          noDocTypeSelected: "Выберите тип документа из выпадающего списка выше, чтобы появились поля.",
+          noTasksTitle: "Нет доступных документов для разметки",
+          noTasksDesc: "Все загруженные файлы уже проверены вами или находятся в обработке.",
+          checkUpdatesBtn: "Проверить обновления",
+          saveAndNextBtn: "Сохранить и далее →",
+          documentLabel: "Документ",
+          waitingTask: "Ожидание задачи...",
+          resetBtn: "Сброс",
+          docNotSelected: "Документ не выбран",
+          block1Title: "1. Загрузка файлов",
+          totalUploaded: "Всего загружено",
+          overlapLabel: "Процент двойной проверки (перехлест %):",
+          okBtn: "ОК",
+          uploadLocalFiles: "Загрузить файлы с компьютера:",
+          uploadingStatus: "Загрузка...",
+          uploadFilesBtn: "Загрузить выбранные файлы",
+          csvImportLabel: "Или массовый импорт по ссылкам из CSV:",
+          importingStatus: "Импорт...",
+          importCsvBtn: "Импортировать CSV со ссылками",
+          block2Title: "2. Конструктор форм",
+          docTypePlaceholder: "Название типа (например: ДКП, Паспорт)",
+          fieldLabelPlaceholder: "Название поля",
+          typeText: "Текст",
+          typeNumber: "Цифры",
+          typeDate: "Дата",
+          addFieldBtn: "+ Добавить поле",
+          saveDocTypeBtn: "Сохранить тип",
+          createdDocTypes: "Созданные типы документов:",
+          noDocTypesYet: "Нет созданных типов",
+          fieldsCountLabel: "полей",
+          deleteBtn: "Удалить",
+          block3Title: "3. Экспорт данных",
+          readyToExport: "Размечено и готово к выгрузке",
+          docShort: "док.",
+          exportDesc: "Файлы попадают сюда сразу после проверки асессором. При возникновении конфликта документ автоматически переносится в Блок 4.",
+          downloadJsonBtn: "Скачать JSON",
+          downloadCsvBtn: "Скачать CSV",
+          block5Title: "5. Управление пользователями",
+          totalLabel: "Всего",
+          myAccountTitle: "Мои учетные данные",
+          myLoginPlaceholder: "Мой логин",
+          myPassPlaceholder: "Мой пароль",
+          updateBtn: "Обновить",
+          addUserTitle: "Добавить пользователя",
+          roleAssessor: "Асессор",
+          roleAdmin: "Админ",
+          roleSuperadmin: "Суперадмин",
+          addBtn: "Добавить",
+          saveBtn: "Сохр.",
+          block6Title: "6. Статистика асессоров",
+          block6Subtitle: "При бездействии более 30 сек таймер ставится на паузу",
+          refreshBtn: "Обновить",
+          thAssessor: "Логин асессора",
+          thLabeled: "Размечено файлов",
+          thTotalTime: "Общее время",
+          thAvgTime: "Среднее время / док",
+          thErrors: "Ошибки (конфликты)",
+          noStatsData: "Нет данных по асессорам",
+          block7Title: "7. Управление системой и резервное копирование",
+          block7Subtitle: "Сохранение состояния, восстановление и полный сброс",
+          backupTitle: "Резервное сохранение",
+          backupDesc: "Скачать полный слепок базы данных.",
+          downloadBackupBtn: "Скачать резервную копию (.json)",
+          restoreTitle: "Загрузка данных",
+          restoreDesc: "Восстановить систему из файла.",
+          restoreBtn: "Восстановить из файла",
+          resetTitle: "Удаление всех данных",
+          resetDesc: "Удаляет все загруженные документы и обнуляет статистику.",
+          resetBtnText: "Удалить все данные",
+          block4Title: "4. Перепроверка (Конфликты разметки)",
+          block4Subtitle: "Документы, в которых асессоры ввели разные данные",
+          pcsLabel: "шт.",
+          noConflictsMsg: "Конфликтов разметки нет. Все проверенные документы согласованы.",
+          conflictBadge: "Конфликт",
+          openOriginalBtn: "Открыть оригинал в новой вкладке",
+          sendToRecheckBtn: "Отправить на перепроверку асессорам",
+          assessorLabel: "Асессор",
+          noSuchTypeShort: "Нет такого типа",
+          noTypeShort: "Без типа",
+          markedAsTrash: "Асессор отметил документ как «Нет такого типа»",
+          acceptVariantBtn: "Принять вариант"
+        },
+        en: {
+          loginTitle: "Sign In",
+          loginSubtitle: "Enter your username and password to access the platform",
+          loginLabel: "Username",
+          passLabel: "Password",
+          signInBtn: "Sign In",
+          assessorPanel: "Assessor Labeling Panel",
+          adminPanel: "Admin Control Panel",
+          conflictsCount: "Conflicts for re-check",
+          pauseState: "Paused (idle > 30s)",
+          timeLabel: "Time",
+          secLabel: "sec",
+          logoutBtn: "Sign Out",
+          selectDocType: "Select document type",
+          selectDocTypePlaceholder: "-- Select document type --",
+          noSuchTypeBtn: "No such type",
+          fieldsToFill: "Fields to fill",
+          unreadableField: "Field marked as unreadable",
+          enterValue: "Enter value...",
+          unreadableCheck: "Unreadable ✓",
+          unreadableBtn: "Unreadable",
+          noDocTypeSelected: "Select a document type from the dropdown above to show fields.",
+          noTasksTitle: "No documents available for labeling",
+          noTasksDesc: "All uploaded files have already been verified by you or are being processed.",
+          checkUpdatesBtn: "Check for updates",
+          saveAndNextBtn: "Save and next →",
+          documentLabel: "Document",
+          waitingTask: "Waiting for task...",
+          resetBtn: "Reset",
+          docNotSelected: "No document selected",
+          block1Title: "1. File Upload",
+          totalUploaded: "Total uploaded",
+          overlapLabel: "Double check percentage (overlap %):",
+          okBtn: "OK",
+          uploadLocalFiles: "Upload files from computer:",
+          uploadingStatus: "Uploading...",
+          uploadFilesBtn: "Upload selected files",
+          csvImportLabel: "Or bulk import links from CSV:",
+          importingStatus: "Importing...",
+          importCsvBtn: "Import CSV links",
+          block2Title: "2. Form Builder",
+          docTypePlaceholder: "Type name (e.g., Contract, ID)",
+          fieldLabelPlaceholder: "Field label",
+          typeText: "Text",
+          typeNumber: "Number",
+          typeDate: "Date",
+          addFieldBtn: "+ Add Field",
+          saveDocTypeBtn: "Save Type",
+          createdDocTypes: "Created document types:",
+          noDocTypesYet: "No types created",
+          fieldsCountLabel: "fields",
+          deleteBtn: "Delete",
+          block3Title: "3. Data Export",
+          readyToExport: "Labeled and ready for export",
+          docShort: "doc",
+          exportDesc: "Files end up here after verification. Conflicts are automatically moved to Block 4.",
+          downloadJsonBtn: "Download JSON",
+          downloadCsvBtn: "Download CSV",
+          block5Title: "5. User Management",
+          totalLabel: "Total",
+          myAccountTitle: "My credentials",
+          myLoginPlaceholder: "My login",
+          myPassPlaceholder: "My password",
+          updateBtn: "Update",
+          addUserTitle: "Add user",
+          roleAssessor: "Assessor",
+          roleAdmin: "Admin",
+          roleSuperadmin: "Superadmin",
+          addBtn: "Add",
+          saveBtn: "Save",
+          block6Title: "6. Assessor Statistics",
+          block6Subtitle: "Timer pauses after 30 seconds of inactivity",
+          refreshBtn: "Refresh",
+          thAssessor: "Assessor Login",
+          thLabeled: "Labeled files",
+          thTotalTime: "Total time",
+          thAvgTime: "Avg time / doc",
+          thErrors: "Errors (conflicts)",
+          noStatsData: "No data available",
+          block7Title: "7. System Management & Backup",
+          block7Subtitle: "State saving, restoration, and full reset",
+          backupTitle: "Backup",
+          backupDesc: "Download full database snapshot.",
+          downloadBackupBtn: "Download backup (.json)",
+          restoreTitle: "Restore Data",
+          restoreDesc: "Restore system from backup file.",
+          restoreBtn: "Restore from file",
+          resetTitle: "Delete All Data",
+          resetDesc: "Deletes all documents and resets assessor statistics.",
+          resetBtnText: "Delete all data",
+          block4Title: "4. Re-check (Labeling Conflicts)",
+          block4Subtitle: "Documents where assessors entered conflicting values",
+          pcsLabel: "pcs",
+          noConflictsMsg: "No labeling conflicts. All verified documents are agreed upon.",
+          conflictBadge: "Conflict",
+          openOriginalBtn: "Open original in new tab",
+          sendToRecheckBtn: "Send back for re-check",
+          assessorLabel: "Assessor",
+          noSuchTypeShort: "No such type",
+          noTypeShort: "No type",
+          markedAsTrash: "Assessor marked document as «No such type»",
+          acceptVariantBtn: "Accept variant"
+        }
+      },
+
+      currentUser: null,
+      loginForm: { username: '', password: '' },
+      showLoginPass: false,
+      docTypes: [],
+      currentTask: null,
+      selectedDocType: '',
+      formData: {},
+      scale: 1.0,
+      rotation: 0,
+      statusBanner: '',
+      selectedCsvFile: null,
+      activeSeconds: 0,
+      lastActivityTime: Date.now(),
+      isIdle: false,
+      timerInterval: null,
+      selectedFiles: [],
+      cdnUrlsText: '',
+      isUploading: false,
+      overlapPercent: 10,
+      overlapSavedMsg: '',
+      totalDocumentsCount: 0,
+      newDocTypeName: '',
+      newDocTypeFields: [{ key: '', label: '', type: 'text' }],
+      conflicts: [],
+      stats: [],
+      exportedData: [],
+      users: [],
+      newUser: { username: '', password: '', role: 'assessor', showPass: false },
+      myAccount: { username: '', password: '', showPass: false },
+      backupFileContent: null
+    };
+  },
+  computed: {
+    activeSchema() {
+      const found = this.docTypes.find(d => d.name === this.selectedDocType);
+      return found ? found.fields_schema : [];
+    },
+    assessorId() {
+      return this.currentUser ? this.currentUser.username : 'anonymous';
+    }
+  },
+  mounted() {
+    const resetIdle = () => {
+      this.lastActivityTime = Date.now();
+      if (this.isIdle) this.isIdle = false;
+    };
+    ['mousemove', 'keydown', 'mousedown', 'wheel', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, resetIdle, { passive: true });
+    });
+
+    this.timerInterval = setInterval(() => {
+      if (this.currentUser?.role === 'assessor' && this.currentTask) {
+        if (Date.now() - this.lastActivityTime <= 30000) {
+          this.isIdle = false;
+          this.activeSeconds += 1;
+        } else {
+          this.isIdle = true;
+        }
+      }
+    }, 1000);
+
+    const saved = localStorage.getItem('assessor_user');
+    if (saved) {
+      try {
+        this.currentUser = JSON.parse(saved);
+        this.syncMyAccountForm();
+        this.loadAllData();
+      } catch (e) {
+        localStorage.removeItem('assessor_user');
+      }
+    }
+  },
+  methods: {
+    t(key) {
+      const lang = this.currentLang in this.translations ? this.currentLang : 'ru';
+      return this.translations[lang][key] || key;
+    },
+    changeLanguage(lang) {
+      this.currentLang = lang;
+      localStorage.setItem('lang', lang);
+      window.location.reload();
+    },
+    roleLabel(role) {
+      if (role === 'superadmin') return this.currentLang === 'en' ? 'Superadmin' : 'Суперадмин';
+      if (role === 'admin') return this.currentLang === 'en' ? 'Admin' : 'Админ';
+      return this.currentLang === 'en' ? 'Assessor' : 'Асессор';
+    },
+    formatTime(sec) {
+      const s = Math.round(sec || 0);
+      if (s < 60) return `${s} ${this.t('secLabel')}`;
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      return `${m} min ${rem} s`;
+    },
+    syncMyAccountForm() {
+      if (!this.currentUser) return;
+      this.myAccount.username = this.currentUser.username;
+      this.myAccount.password = this.currentUser.password || '';
+    },
+    async handleLogin() {
+      if (!this.loginForm.username || !this.loginForm.password) return;
+      try {
+        const res = await fetch('/workflow/login', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept-Language': localStorage.getItem('lang') || 'ru'
+          },
+          body: JSON.stringify(this.loginForm)
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || (this.currentLang === 'en' ? 'Invalid username or password' : 'Неверный логин или пароль'));
+        }
+        const data = await res.json();
+        this.currentUser = data;
+        localStorage.setItem('assessor_user', JSON.stringify(data));
+        this.syncMyAccountForm();
+        await this.loadAllData();
+      } catch (err) {
+        alert(err.message);
+      }
+    },
+    logout() {
+      this.currentUser = null;
+      this.currentTask = null;
+      localStorage.removeItem('assessor_user');
+    },
+    async loadAllData() {
+      if (!this.currentUser) return;
+      await this.fetchDocTypes();
+      if (this.currentUser.role === 'assessor') {
+        await this.fetchNextTask();
+      } else {
+        await Promise.all([
+          this.fetchAdminStats(),
+          this.fetchExportData(),
+          this.fetchConflicts(),
+          this.fetchUsers(),
+          this.fetchOverlap()
+        ]);
+      }
+    },
+    fileUrl(docId) {
+      return `/documents/${docId}/file?assessor_id=${encodeURIComponent(this.assessorId)}`;
+    },
+    isPdf(filename, url) {
+      const target = (filename || url || '').toLowerCase();
+      return target.endsWith('.pdf');
+    },
+    zoomIn() { this.scale = Math.min(4.0, +(this.scale + 0.2).toFixed(2)); },
+    zoomOut() { this.scale = Math.max(0.3, +(this.scale - 0.2).toFixed(2)); },
+    rotateDoc() { this.rotation = (this.rotation + 90) % 360; },
+    resetViewer() { this.scale = 1.0; this.rotation = 0; },
+    handleWheelZoom(e) {
+      if (e.deltaY < 0) this.zoomIn();
+      else this.zoomOut();
+    },
+    async fetchDocTypes() {
+      const res = await fetch('/workflow/doc-types');
+      if (res.ok) this.docTypes = await res.json();
+    },
+    async fetchNextTask() {
+      this.resetViewer();
+      const res = await fetch(`/workflow/next-task?assessor_id=${encodeURIComponent(this.assessorId)}`);
+      if (!res.ok) {
+        this.currentTask = null;
+        return;
+      }
+      const data = await res.json();
+      if (data && data.document_id) {
+        this.currentTask = data;
+        this.selectedDocType = '';
+        this.initFormFields();
+        this.activeSeconds = 0;
+        this.lastActivityTime = Date.now();
+        this.isIdle = false;
+      } else {
+        this.currentTask = null;
+      }
+    },
+    initFormFields() {
+      const obj = {};
+      for (const f of this.activeSchema) {
+        obj[f.key] = { value: '', unreadable: false };
+      }
+      this.formData = obj;
+    },
+    toggleUnreadable(key) {
+      this.formData[key].unreadable = !this.formData[key].unreadable;
+      if (this.formData[key].unreadable) this.formData[key].value = '';
+    },
+    async submitForm() {
+      if (!this.currentTask) return;
+      const duration = Math.max(1, this.activeSeconds);
+      const res = await fetch('/workflow/submit', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept-Language': localStorage.getItem('lang') || 'ru'
+        },
+        body: JSON.stringify({
+          document_id: this.currentTask.document_id,
+          assessor_id: this.assessorId,
+          selected_doc_type: this.selectedDocType,
+          data: this.formData,
+          is_trash: false,
+          duration_seconds: duration
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Ошибка сохранения');
+        return;
+      }
+      this.statusBanner = this.currentLang === 'en' ? 'Successfully saved!' : 'Ответ успешно сохранен!';
+      setTimeout(() => { this.statusBanner = ''; }, 2500);
+      await this.fetchNextTask();
+    },
+    async submitTrash() {
+      if (!this.currentTask) return;
+      const duration = Math.max(1, this.activeSeconds);
+      await fetch('/workflow/submit', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept-Language': localStorage.getItem('lang') || 'ru'
+        },
+        body: JSON.stringify({
+          document_id: this.currentTask.document_id,
+          assessor_id: this.assessorId,
+          selected_doc_type: null,
+          data: {},
+          is_trash: true,
+          duration_seconds: duration
+        })
+      });
+      this.statusBanner = this.currentLang === 'en' ? 'Marked as unreadable document' : 'Отмечено как нечитаемый документ';
+      setTimeout(() => { this.statusBanner = ''; }, 2500);
+      await this.fetchNextTask();
+    },
+    async fetchOverlap() {
+      const res = await fetch('/workflow/admin/overlap');
+      if (res.ok) {
+        const data = await res.json();
+        this.overlapPercent = data.overlap_percent;
+      }
+    },
+    async updateOverlap() {
+      // Берем имя текущего залогиненного пользователя
+      const username = this.currentUser ? this.currentUser.username : '';
+
+      const res = await fetch(`/workflow/admin/overlap?actor_username=${encodeURIComponent(username)}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept-Language': localStorage.getItem('lang') || 'ru'
+        },
+        body: JSON.stringify({ overlap_percent: Number(this.overlapPercent) })
+      });
+      
+      if (res.ok) {
+        this.overlapSavedMsg = this.currentLang === 'en' ? `Overlap ${this.overlapPercent}% applied!` : `Перехлест ${this.overlapPercent}% сразу вступил в силу!`;
+        setTimeout(() => { this.overlapSavedMsg = ''; }, 3000);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || (this.currentLang === 'en' ? 'Access denied' : 'Доступ запрещен'));
+      }
+    },
+    handleFileSelect(e) {
+      this.selectedFiles = Array.from(e.target.files);
+    },
+    async uploadSelectedFiles() {
+      if (!this.selectedFiles.length) return;
+      this.isUploading = true;
+      try {
+        const BATCH_SIZE = 200;
+        let totalUploaded = 0;
+        for (let i = 0; i < this.selectedFiles.length; i += BATCH_SIZE) {
+          const batch = this.selectedFiles.slice(i, i + BATCH_SIZE);
+          const fd = new FormData();
+          batch.forEach(file => fd.append('files', file));
+          const res = await fetch('/documents/upload-batch', { method: 'POST', body: fd });
+          if (!res.ok) throw new Error('Upload error');
+          const data = await res.json();
+          totalUploaded += data.length;
+        }
+        this.selectedFiles = [];
+        await this.loadAllData();
+        alert(`Uploaded: ${totalUploaded}`);
+      } catch (err) {
+        alert(err.message || 'Network error');
+      } finally {
+        this.isUploading = false;
+      }
+    },
+    addBuilderField() {
+      this.newDocTypeFields.push({ key: '', label: '', type: 'text' });
+    },
+    removeBuilderField(idx) {
+      this.newDocTypeFields.splice(idx, 1);
+    },
+    async saveNewDocType() {
+      if (!this.newDocTypeName.trim()) return;
+      const validFields = this.newDocTypeFields.filter(f => f.key.trim() && f.label.trim());
+      if (!validFields.length) {
+        alert('Добавьте хотя бы одно поле');
+        return;
+      }
+      const res = await fetch('/workflow/doc-types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this.newDocTypeName, fields_schema: validFields })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Ошибка создания типа');
+        return;
+      }
+      this.newDocTypeName = '';
+      this.newDocTypeFields = [{ key: '', label: '', type: 'text' }];
+      await this.fetchDocTypes();
+    },
+    async deleteDocType(typeId) {
+      if (!confirm('Удалить этот тип документа?')) return;
+      await fetch(`/workflow/doc-types/${typeId}`, { method: 'DELETE' });
+      await this.fetchDocTypes();
+    },
+    async fetchAdminStats() {
+      const res = await fetch('/workflow/admin/stats');
+      if (res.ok) {
+        const data = await res.json();
+        this.totalDocumentsCount = data.total_documents || 0;
+        this.stats = data.stats || [];
+      }
+    },
+    async fetchExportData() {
+      const res = await fetch('/workflow/export');
+      if (res.ok) this.exportedData = await res.json();
+    },
+    downloadExport(format) {
+      window.location.href = `/workflow/export?format=${format}`;
+    },
+    async fetchConflicts() {
+      const res = await fetch('/workflow/conflicts');
+      if (res.ok) this.conflicts = await res.json();
+    },
+    async resolveConflictWith(docId, winningSub) {
+      await fetch(`/workflow/resolve/${docId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          winning_submission_id: winningSub.id,
+          winning_assessor_id: winningSub.assessor_id,
+          doc_type: winningSub.selected_doc_type,
+          final_data: winningSub.data,
+          is_trash: winningSub.is_trash
+        })
+      });
+      await this.loadAllData();
+    },
+    async sendToRecheck(docId) {
+      await fetch(`/workflow/recheck/${docId}`, { method: 'POST' });
+      await this.loadAllData();
+    },
+    async fetchUsers() {
+      const res = await fetch('/workflow/users');
+      if (res.ok) {
+        const raw = await res.json();
+        this.users = raw.map(u => ({ ...u, showPass: false }));
+        const me = this.users.find(u => u.id === this.currentUser.id || u.username === this.currentUser.username);
+        if (me) {
+          this.currentUser = { ...me };
+          localStorage.setItem('assessor_user', JSON.stringify(this.currentUser));
+          this.syncMyAccountForm();
+        }
+      }
+    },
+    async saveMyAccount() {
+      const res = await fetch(`/workflow/users/${this.currentUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: this.myAccount.username,
+          password: this.myAccount.password
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Ошибка сохранения');
+        return;
+      }
+      const updated = await res.json();
+      this.currentUser = updated;
+      localStorage.setItem('assessor_user', JSON.stringify(updated));
+      await this.fetchUsers();
+      alert('Ваши данные обновлены!');
+    },
+    async createUser() {
+      if (!this.newUser.username || !this.newUser.password) return;
+      const res = await fetch('/workflow/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: this.newUser.username,
+          password: this.newUser.password,
+          role: this.newUser.role
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Ошибка создания пользователя');
+        return;
+      }
+      this.newUser = { username: '', password: '', role: 'assessor', showPass: false };
+      await this.fetchUsers();
+      await this.fetchAdminStats();
+    },
+    async saveUserRow(usr) {
+      const res = await fetch(`/workflow/users/${usr.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: usr.username,
+          password: usr.password,
+          role: usr.role
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || 'Ошибка обновления пользователя');
+        return;
+      }
+      if (usr.id === this.currentUser.id) {
+        const updated = await res.json();
+        this.currentUser = updated;
+        localStorage.setItem('assessor_user', JSON.stringify(updated));
+        this.syncMyAccountForm();
+      }
+      await this.fetchUsers();
+      await this.fetchAdminStats();
+      alert('Данные пользователя сохранены!');
+    },
+    async deleteUser(userId) {
+      if (userId === this.currentUser.id) {
+        alert('Нельзя удалить собственную учетную запись!');
+        return;
+      }
+      if (!confirm('Удалить пользователя?')) return;
+      await fetch(`/workflow/users/${userId}`, { method: 'DELETE' });
+      await this.fetchUsers();
+      await this.fetchAdminStats();
+    },
+    async downloadBackup() {
+      const username = this.currentUser ? this.currentUser.username : '';
+      try {
+        const res = await fetch(`/workflow/superadmin/backup?actor_username=${encodeURIComponent(username)}`, {
+          method: 'GET',
+          headers: {
+            'Accept-Language': localStorage.getItem('lang') || 'ru'
+          }
+        });
+        
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || (this.currentLang === 'en' ? 'Access denied (Superadmin only)' : 'Доступ запрещен (только для суперадмина)'));
+        }
+
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+      } catch (err) {
+        alert(err.message);
+      }
+    },
+    handleBackupFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          this.backupFileContent = JSON.parse(evt.target.result);
+        } catch (err) {
+          alert('Некорректный JSON-файл резервной копии');
+          this.backupFileContent = null;
+        }
+      };
+      reader.readAsText(file);
+    },
+    async restoreBackup() {
+      if (!this.backupFileContent) return;
+      if (!confirm('Восстановить данные из резервной копии? Текущие данные будут заменены.')) return;
+      
+      const username = this.currentUser ? this.currentUser.username : '';
+      const res = await fetch(`/workflow/superadmin/restore?actor_username=${encodeURIComponent(username)}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept-Language': localStorage.getItem('lang') || 'ru'
+        },
+        body: JSON.stringify(this.backupFileContent)
+      });
+      
+      if (res.ok) {
+        alert('Данные успешно восстановлены!');
+        this.backupFileContent = null;
+        await this.loadAllData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Ошибка при восстановлении данных');
+      }
+    },
+
+    async resetAllData() {
+      const confirmText = 'Вы уверены? Будут удалены ВСЕ загруженные документы, обнулена статистика асессоров, удалены конструктор форм, экспорт данных и конфликты разметок.';
+      if (!confirm(confirmText)) return;
+
+      const username = this.currentUser ? this.currentUser.username : '';
+      const res = await fetch(`/workflow/superadmin/reset-all?actor_username=${encodeURIComponent(username)}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept-Language': localStorage.getItem('lang') || 'ru'
+        }
+      });
+      
+      if (res.ok) {
+        alert('Все данные успешно удалены и обнулены!');
+        await this.loadAllData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || 'Ошибка при очистке данных');
+      }
+    },
+    handleCsvSelect(e) {
+      this.selectedCsvFile = e.target.files[0] || null;
+    },
+    async uploadCsvLinks() {
+      if (!this.selectedCsvFile) return;
+      this.isUploading = true;
+      const fd = new FormData();
+      fd.append('file', this.selectedCsvFile);
+      try {
+        const res = await fetch('/documents/import-links-csv', {
+          method: 'POST',
+          body: fd
+        });
+        if (!res.ok) throw new Error('Ошибка при импорте CSV со ссылками');
+        const data = await res.json();
+        this.selectedCsvFile = null;
+        await this.loadAllData();
+        alert(`Успешно импортировано документов по ссылкам: ${data.length}`);
+      } catch (err) {
+        alert(err.message || 'Ошибка сети при импорте');
+      } finally {
+        this.isUploading = false;
+      }
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

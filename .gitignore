@@ -1,0 +1,27 @@
+# Виртуальное окружение
+backend/.venv/
+.venv/
+venv/
+ENV/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# База данных (если вы используете локальный SQLite или дампы Postgres)
+*.sqlite3
+*.db
+backend/data/
+
+# Локальные настройки и секреты
+.env
+backend/.env
+config.env
+backend/config.env
+*.local
+
+# Загруженные пользователями файлы (чтобы не улетали чужие документы)
+backend/storage/
+storage/
