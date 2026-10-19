@@ -412,7 +412,31 @@ def export_results(format: str = "json", db: Session = Depends(get_db)):
             media_type="application/json; charset=utf-8",
             headers={"Content-Disposition": "attachment; filename=export_results.json"}
         )
+    
+@router.get("/export/stats")
+def get_export_stats(db: Session = Depends(get_db)):
+    """Возвращает общее количество готовых документов и разбивку по их типам для Блока 3."""
+    from sqlalchemy import func
+    
+    # Группируем завершенные документы из таблицы FinalResult по их типу
+    stats_query = (
+        db.query(FinalResult.doc_type, func.count(FinalResult.id))
+        .group_by(FinalResult.doc_type)
+        .all()
+    )
+    
+    breakdown = []
+    total_count = 0
+    
+    for doc_type, count in stats_query:
+        dt_name = doc_type if doc_type else "Не указан"
+        breakdown.append({"doc_type": dt_name, "count": count})
+        total_count += count
 
+    return {
+        "total": total_count,
+        "breakdown": breakdown
+    }
 
 @router.get("/admin/stats")
 def get_admin_stats(db: Session = Depends(get_db)):
