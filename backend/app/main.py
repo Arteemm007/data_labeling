@@ -9,6 +9,14 @@ from sqlalchemy import text
 from app.core.database import engine, Base, SessionLocal
 from app.models import document, workflow
 from app.api import documents, workflow as workflow_api
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = (
+    BASE_DIR.parent / "frontend"
+    if (BASE_DIR.parent / "frontend").exists()
+    else Path("/frontend")
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -56,15 +64,21 @@ app.include_router(workflow_api.router)
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():
-    """Отдает главный веб-интерфейс приложения."""
-    frontend_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "index.html")
-    )
-    return FileResponse(frontend_path)
+  """Отдает главный веб-интерфейс приложения."""
+  return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/favicon.png", include_in_schema=False)
+def serve_favicon():
+  """Отдает иконку сайта."""
+  favicon_path = FRONTEND_DIR / "favicon.png"
+  if favicon_path.exists():
+    return FileResponse(favicon_path)
+  return {"detail": "Not found"}
 
 
 @app.get("/ping", tags=["Проверка связи"])
 def ping():
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    return {"status": "ok", "database": "connected"}
+  with engine.connect() as conn:
+    conn.execute(text("SELECT 1"))
+  return {"status": "ok", "database": "connected"}

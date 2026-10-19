@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Assessor Platform"
     
-    # Настройки PostgreSQL (теперь подтягиваются из .env или используют безопасные дефолты)
+    # Настройки PostgreSQL
     POSTGRES_USER: str = "admin"
     POSTGRES_PASSWORD: str = "secretpassword"
     POSTGRES_SERVER: str = "localhost"
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         )
 
     class Config:
-        env_file = ".env"  # Pydantic автоматически прочитает файл .env в корне бэкенда
+        env_file = "../.env"  # <--- Указываем путь на уровень выше, в корень проекта
         extra = "ignore"
 
 settings = Settings()
