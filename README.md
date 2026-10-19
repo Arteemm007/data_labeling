@@ -50,7 +50,7 @@
    ```
 
 2. **Настройте переменные окружения:**
-   Создайте файл `.env` в папке `backend/` по примеру:
+   Создайте файл `.env` в папке `data_labeling/` по примеру:
    ```env
    POSTGRES_USER=admin
    POSTGRES_PASSWORD=ваш_пароль
@@ -76,7 +76,7 @@ cd data_labeling
 ```
 
 ### 2. Настройка переменных окружения
-Создайте файл `.env` в папке `backend/` по аналогии с шаблоном `.env.example`:
+Создайте файл `.env` в папке `data_labeling/` по аналогии с шаблоном `.env.example`:
 ```env
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=ваш_пароль
