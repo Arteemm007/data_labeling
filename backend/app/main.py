@@ -18,10 +18,8 @@ FRONTEND_DIR = (
     else Path("/frontend")
 )
 
-Base.metadata.create_all(bind=engine)
-
-
 def run_auto_migrations_and_seed():
+    Base.metadata.create_all(bind=engine)
     # 1. Безопасное добавление новых колонок в существующую БД
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_sample_double BOOLEAN DEFAULT FALSE;"))

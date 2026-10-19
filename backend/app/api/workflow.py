@@ -84,29 +84,34 @@ def create_user(payload: UserCreate, actor_username: str = None, lang: str = Dep
     }
 
 
-@router.post("/users")
-def create_user(payload: UserCreate, actor_username: str = None, lang: str = Depends(get_lang), db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.username == payload.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail=get_message("user_exists", lang))
-    
-    if payload.role == "superadmin":
-        # Проверяем, есть ли вообще супердмины в базе. Если база пустая — разрешаем создать первого
-        superadmin_exists = db.query(User).filter(User.role == "superadmin").first()
-        
-        if superadmin_exists:
-            actor = db.query(User).filter(User.username == actor_username).first() if actor_username else None
-            # Если актер не найден или не супердмин — блокируем, НО если вы хотите 
-            # временно полностью отключить проверку, просто закомментируйте блок ниже
-            if not actor or actor.role != "superadmin":
-                raise HTTPException(status_code=403, detail=get_message("superadmin_only", lang))
+@router.put("/users/{user_id}")
+def update_user(user_id: int, payload: UserUpdate, actor_username: str = None, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    user = User(
-        username=payload.username.strip(),
-        password=payload.password,
-        role=payload.role
-    )
-    db.add(user)
+    # Защита: назначить роль superadmin может только суперадмин
+    if payload.role == "superadmin":
+        actor = db.query(User).filter(User.username == actor_username).first() if actor_username else None
+        if not actor or actor.role != "superadmin":
+            raise HTTPException(status_code=403, detail="Только суперадмин может назначать роль суперадмина")
+
+    old_username = user.username
+    if payload.username and payload.username.strip() != user.username:
+        new_uname = payload.username.strip()
+        dup = db.query(User).filter(User.username == new_uname, User.id != user_id).first()
+        if dup:
+            raise HTTPException(status_code=400, detail="Этот логин уже занят")
+        user.username = new_uname
+        db.query(Submission).filter(Submission.assessor_id == old_username).update(
+            {Submission.assessor_id: new_uname}
+        )
+
+    if payload.password is not None and payload.password != "":
+        user.password = payload.password
+    if payload.role:
+        user.role = payload.role
+
     db.commit()
     db.refresh(user)
     return {

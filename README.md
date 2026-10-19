@@ -66,6 +66,12 @@
    docker compose up --build
    ```
 
+### 4. Запуск фронтенда
+Откройте http://localhost:8000 
+
+Логин: superadmin
+Пароль: admin
+
 ---
 
 ## 🛠 Ручной запуск (для разработки)
@@ -107,4 +113,7 @@ uvicorn app.main:app --reload
 ```
 
 ### 4. Запуск фронтенда
-Откройте файл `frontend/index.html` в браузере или запустите через любой локальный HTTP-сервер.
+Откройте http://localhost:8000 
+
+Логин: superadmin
+Пароль: admin
