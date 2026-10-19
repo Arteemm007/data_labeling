@@ -41,24 +41,53 @@
 
 ## ⚙️ Установка и запуск
 
+Самый простой способ запустить проект со всеми зависимостями и базой данных:
+
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone https://github.com/Arteemm007/data_labeling.git
+   cd data_labeling
+   ```
+
+2. **Настройте переменные окружения:**
+   Создайте файл `.env` в папке `backend/` по примеру:
+   ```env
+   POSTGRES_USER=admin
+   POSTGRES_PASSWORD=ваш_пароль
+   POSTGRES_SERVER=postgres
+   POSTGRES_PORT=5432
+   POSTGRES_DB=assessor_db
+   STORAGE_DIR=storage
+   ```
+
+3. **Запустите проект:**
+   ```bash
+   docker compose up --build
+   ```
+
+---
+
+## 🛠 Ручной запуск (для разработки)
+
 ### 1. Клонирование репозитория
 ```bash
-git clone [https://github.com/ваш_логин/data_labeling.git](https://github.com/ваш_логин/data_labeling.git)
+git clone https://github.com/Arteemm007/data_labeling.git
 cd data_labeling
+```
 
-2. Настройка переменных окружения
-Создайте файл .env в папке backend/ по аналогии с шаблоном .env.example:
-
-Фрагмент кода
+### 2. Настройка переменных окружения
+Создайте файл `.env` в папке `backend/` по аналогии с шаблоном `.env.example`:
+```env
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=ваш_пароль
 POSTGRES_SERVER=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=assessor_db
 STORAGE_DIR=storage
+```
 
-3. Запуск бэкенда
-Bash
+### 3. Запуск бэкенда
+```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate  # Для Windows: .venv\Scripts\activate
@@ -69,6 +98,7 @@ alembic upgrade head
 
 # Запуск сервера
 uvicorn app.main:app --reload
+```
 
-4. Запуск фронтенда
-Откройте файл frontend/index.html в браузере или запустите через любой локальный HTTP-сервер.
+### 4. Запуск фронтенда
+Откройте файл `frontend/index.html` в браузере или запустите через любой локальный HTTP-сервер.

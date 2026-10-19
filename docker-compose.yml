@@ -1,16 +1,25 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:15-alpine
     container_name: assessor_postgres
-    restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-assessor_db}
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: assessor_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env  # <-- Указываем брать переменные из корневого файла .env
+    depends_on:
+      - postgres
 
 volumes:
   pgdata:

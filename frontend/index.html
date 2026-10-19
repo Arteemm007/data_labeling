@@ -302,9 +302,20 @@
           <div class="border-b border-slate-100 pb-3">
             <h2 class="text-sm font-bold text-slate-900">{{ t('block3Title') }}</h2>
           </div>
-          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
             <div class="text-xs text-slate-500">{{ t('readyToExport') }}:</div>
-            <div class="text-3xl font-bold text-slate-900">{{ exportedData.length }} <span class="text-sm font-normal text-slate-500">{{ t('docShort') }}.</span></div>
+            <div class="text-3xl font-bold text-slate-900">
+              {{ exportStats.total }} <span class="text-sm font-normal text-slate-500">{{ t('docShort') }}.</span>
+            </div>
+
+            <!-- Детализация по типам документов -->
+            <div v-if="exportStats.breakdown && exportStats.breakdown.length > 0" class="pt-2 border-t border-slate-200/60 space-y-1">
+              <div v-for="item in exportStats.breakdown" :key="item.doc_type" class="flex justify-between text-xs">
+                <span class="text-slate-600 truncate max-w-[140px]" :title="item.doc_type">{{ item.doc_type }}</span>
+                <span class="font-semibold text-slate-800">{{ item.count }} {{ t('docShort') }}.</span>
+              </div>
+            </div>
+
             <p class="text-[11px] text-slate-500 pt-1">
               {{ t('exportDesc') }}
             </p>
@@ -812,6 +823,7 @@ createApp({
       conflicts: [],
       stats: [],
       exportedData: [],
+      exportStats: { total: 0, breakdown: [] },
       users: [],
       newUser: { username: '', password: '', role: 'assessor', showPass: false },
       myAccount: { username: '', password: '', showPass: false },
@@ -923,10 +935,17 @@ createApp({
         await Promise.all([
           this.fetchAdminStats(),
           this.fetchExportData(),
+          this.fetchExportStats(),
           this.fetchConflicts(),
           this.fetchUsers(),
           this.fetchOverlap()
         ]);
+      }
+    },
+    async fetchExportStats() {
+      const res = await fetch('/workflow/export/stats');
+      if (res.ok) {
+        this.exportStats = await res.json();
       }
     },
     fileUrl(docId) {
