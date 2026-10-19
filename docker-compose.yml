@@ -1,25 +1,38 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
     container_name: assessor_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: assessor_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
-      - .env  # <-- Указываем брать переменные из корневого файла .env
+      - .env
+    environment:
+      - POSTGRES_SERVER=postgres
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./frontend:/frontend
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

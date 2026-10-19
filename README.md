@@ -50,7 +50,8 @@
    ```
 
 2. **Настройте переменные окружения:**
-   Создайте файл `.env` в папке `data_labeling/` по примеру:
+   Создайте файл `.env` в корне проекта (рядом с docker-compose.yml) со следующим содержимым:
+
    ```env
    POSTGRES_USER=admin
    POSTGRES_PASSWORD=ваш_пароль
@@ -76,7 +77,8 @@ cd data_labeling
 ```
 
 ### 2. Настройка переменных окружения
-Создайте файл `.env` в папке `data_labeling/` по аналогии с шаблоном `.env.example`:
+Создайте файл `.env` в корне проекта:
+
 ```env
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=ваш_пароль
@@ -91,6 +93,10 @@ STORAGE_DIR=storage
 cd backend
 python -m venv .venv
 source .venv/bin/activate  # Для Windows: .venv\Scripts\activate
+# Через uv (рекомендуется)
+
+uv pip install -r requirements.txt
+# Или через стандартный pip
 pip install -r requirements.txt
 
 # Применение миграций базы данных

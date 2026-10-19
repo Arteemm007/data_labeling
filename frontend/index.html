@@ -1205,7 +1205,8 @@ createApp({
     },
     async createUser() {
       if (!this.newUser.username || !this.newUser.password) return;
-      const res = await fetch('/workflow/users', {
+      const actorUsername = this.currentUser ? this.currentUser.username : '';
+      const res = await fetch(`/workflow/users?actor_username=${encodeURIComponent(actorUsername)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1224,7 +1225,8 @@ createApp({
       await this.fetchAdminStats();
     },
     async saveUserRow(usr) {
-      const res = await fetch(`/workflow/users/${usr.id}`, {
+      const actorUsername = this.currentUser ? this.currentUser.username : '';
+      const res = await fetch(`/workflow/users/${usr.id}?actor_username=${encodeURIComponent(actorUsername)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
